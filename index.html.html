@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CryptoLab Ultra | Pro Trading Suite</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;600;800&family=JetBrains+Mono:wght@400;700&family=Cairo:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-main: #060709;
+            --bg-card: #0f111a;
+            --accent: #3b82f6;
+            --border: #1e293b;
+            --text-dim: #94a3b8;
+        }
+
+        body {
+            font-family: 'Plus Jakarta Sans', 'Cairo', sans-serif;
+            background-color: var(--bg-main);
+            color: #e2e8f0;
+            overflow: hidden; /* لمنع التمرير الخارجي وتجربة تطبيق سطح مكتب */
+            height: 100vh;
+        }
+
+        .glass-panel {
+            background: rgba(15, 17, 26, 0.8);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--border);
+        }
+
+        .chart-container {
+            height: calc(100vh - 140px);
+            position: relative;
+            background: radial-gradient(circle at center, #111827 0%, #060709 100%);
+        }
+
+        #drawingLayer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 10;
+            cursor: crosshair;
+        }
+
+        .sidebar-tool {
+            width: 44px;
+            height: 44px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 8px;
+            margin-bottom: 8px;
+            transition: all 0.2s;
+            color: var(--text-dim);
+            border: 1px solid transparent;
+        }
+
+        .sidebar-tool:hover {
+            background: rgba(59, 130, 246, 0.1);
+            color: var(--accent);
+        }
+
+        .sidebar-tool.active {
+            background: var(--accent);
+            color: white;
+            box-shadow: 0 0 15px rgba(59, 130, 246, 0.4);
+        }
+
+        .stat-card {
+            background: var(--bg-card);
+            border-left: 3px solid var(--accent);
+            padding: 10px 15px;
+        }
+
+        /* Scrollbar Styling */
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: var(--bg-main); }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 10px; }
+
+        .neon-text { text-shadow: 0 0 10px rgba(59, 130, 246, 0.5); }
+    </style>
+</head>
+<body class="flex flex-col">
+
+    <nav class="h-16 border-b border-slate-800 flex items-center justify-between px-6 bg-[#0f111a] z-20">
+        <div class="flex items-center gap-6">
+            <div class="flex items-center gap-2">
+                <div class="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center font-bold text-white">C</div>
+                <h1 class="text-lg font-extrabold tracking-tighter">CRYPTO<span class="text-blue-500">LAB</span> <span class="text-[10px] bg-blue-900/30 text-blue-400 px-2 py-0.5 rounded ml-2">ULTRA PRO</span></h1>
+            </div>
+            
+            <div class="flex items-center bg-black/40 rounded-full px-3 py-1 border border-slate-800">
+                <select id="projectSelect" onchange="switchProject()" class="bg-transparent text-xs text-slate-300 outline-none cursor-pointer"></select>
+                <button onclick="createNewProject()" class="mr-3 text-blue-500 hover:text-white text-lg">+</button>
+            </div>
+        </div>
+
+        <div class="flex items-center gap-8">
+            <div class="hidden md:flex gap-6">
+                <div class="flex flex-col">
+                    <span class="text-[9px] text-slate-500 uppercase">Current Asset</span>
+                    <span class="text-sm font-bold text-emerald-400">BTC/USDT <span class="text-[10px] font-normal">Live</span></span>
+                </div>
+                <div class="flex flex-col">
+                    <span class="text-[9px] text-slate-500 uppercase">Status</span>
+                    <span class="text-sm font-bold text-white flex items-center gap-1">
+                        <span class="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span> Connected
+                    </span>
+                </div>
+            </div>
+            <button onclick="toggleLogScale()" id="logToggle" class="px-4 py-1.5 rounded-md border border-slate-700 text-[10px] font-bold hover:bg-slate-800 transition-all">LOG SCALE: OFF</button>
+        </div>
+    </nav>
+
+    <div class="flex flex-1 overflow-hidden">
+        <aside class="w-16 border-l border-slate-800 bg-[#0b0e14] flex flex-col items-center py-4">
+            <button onclick="setTool('line')" id="btn-line" class="sidebar-tool active" title="Trend Line">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="5" x2="5" y2="19"></line></svg>
+            </button>
+            <button onclick="setTool('horiz')" id="btn-horiz" class="sidebar-tool" title="Horizontal Ray">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+            </button>
+            <button onclick="setTool('rect')" id="btn-rect" class="sidebar-tool" title="Support/Resistance Zone">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect></svg>
+            </button>
+            <div class="w-8 h-[1px] bg-slate-800 my-2"></div>
+            <input type="color" id="drawColor" value="#3b82f6" class="w-6 h-6 rounded-full bg-transparent border-none cursor-pointer mb-4">
+            <button onclick="clearDrawings()" class="sidebar-tool text-red-500 hover:bg-red-500/10" title="Clear All">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path></svg>
+            </button>
+            <div class="mt-auto">
+                <button onclick="resetZoom()" class="sidebar-tool" title="Reset View">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line><line x1="11" y1="8" x2="11" y2="14"></line><line x1="8" y1="11" x2="14" y2="11"></line></svg>
+                </button>
+            </div>
+        </aside>
+
+        <main class="flex-1 flex flex-col min-w-0 bg-[#060709]">
+            <div class="h-16 flex items-center px-4 gap-4 overflow-x-auto no-scrollbar">
+                <div class="stat-card flex-shrink-0">
+                    <div class="text-[10px] text-slate-500">LAST PRICE</div>
+                    <div class="text-sm font-bold tracking-wider" id="lastPriceDisplay">$0.00</div>
+                </div>
+                <div class="stat-card border-blue-500 flex-shrink-0">
+                    <div class="text-[10px] text-slate-500">INDICATORS</div>
+                    <div class="flex gap-2 mt-1">
+                        <button onclick="toggleMA(20, '#3b82f6')" class="text-[9px] bg-blue-500/10 border border-blue-500/30 px-2 rounded">MA 20</button>
+                        <button onclick="toggleMA(50, '#10b981')" class="text-[9px] bg-emerald-500/10 border border-emerald-500/30 px-2 rounded">MA 50</button>
+                        <button onclick="toggleMA(200, '#ef4444')" class="text-[9px] bg-red-500/10 border border-red-500/30 px-2 rounded">MA 200</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="chart-container flex-1" id="canvasWrapper">
+                <canvas id="mainChart"></canvas>
+                <canvas id="drawingLayer"></canvas>
+            </div>
+        </main>
+
+        <aside class="w-80 border-r border-slate-800 bg-[#0f111a] flex flex-col">
+            <div class="flex border-b border-slate-800">
+                <button class="flex-1 py-3 text-xs font-bold border-b-2 border-blue-500 text-white">DATA</button>
+                <button class="flex-1 py-3 text-xs font-bold text-slate-500 hover:text-white transition">SCRIPTS</button>
+                <button class="flex-1 py-3 text-xs font-bold text-slate-500 hover:text-white transition">SETTINGS</button>
+            </div>
+            
+            <div class="p-4 flex-1 overflow-y-auto space-y-4">
+                <div>
+                    <label class="text-[10px] text-slate-500 block mb-2 font-bold uppercase tracking-widest">Input Market Data</label>
+                    <textarea id="dataInput" oninput="autoSaveAndRefresh()" 
+                        class="w-full h-64 bg-black/50 border border-slate-800 rounded-lg p-3 text-[11px] font-mono text-blue-400 focus:border-blue-500 outline-none transition"
+                        placeholder="YYYY-MM-DD, Price"></textarea>
+                    <p class="text-[9px] text-slate-600 mt-2">Format: Date, Price (one per line)</p>
+                </div>
+
+                <div class="glass-panel p-3 rounded-lg border-slate-800">
+                    <label class="text-[10px] text-slate-500 block mb-2 font-bold uppercase">Chart Aesthetics</label>
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs">Primary Theme Color</span>
+                        <input type="color" id="chartColor" value="#3b82f6" onchange="autoSaveAndRefresh()" class="w-8 h-8 bg-transparent cursor-pointer">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="text-[10px] text-slate-500 block mb-2 font-bold uppercase">Custom Script (JS)</label>
+                    <textarea id="scriptInput" oninput="autoSave()" 
+                        class="w-full h-32 bg-black/50 border border-slate-800 rounded-lg p-3 text-[11px] font-mono text-emerald-500"
+                        placeholder="// write your indicators..."></textarea>
+                </div>
+            </div>
+        </aside>
+    </div>
+
+    <script>
+        // -- Logic & Data Management --
+        const defaultData = "2024-01-01, 42000\n2024-01-02, 43500\n2024-01-03, 41000\n2024-01-04, 44000\n2024-01-05, 46500\n2024-01-06, 45000\n2024-01-07, 48000\n2024-01-08, 52000\n2024-01-09, 51000\n2024-01-10, 55000";
+
+        let projects = JSON.parse(localStorage.getItem('cryptolab_v6')) || { 
+            "الرئيسي": { data: defaultData, drawings: [], activeMAs: {}, script: "", isLog: false, chartColor: "#3b82f6" } 
+        };
+        let currentProjectName = localStorage.getItem('cryptolab_curr') || "الرئيسي";
+        if (!projects[currentProjectName]) currentProjectName = Object.keys(projects)[0];
+
+        let chart;
+        let isDrawing = false;
+        let startX, startY;
+        let currentTool = 'line';
+
+        const drawLayer = document.getElementById('drawingLayer');
+        const dctx = drawLayer.getContext('2d');
+
+        function init() {
+            renderProjectList();
+            loadProjectToUI();
+            syncCanvasSize();
+            updateChart();
+            setupDrawingEvents();
+        }
+
+        function syncCanvasSize() {
+            const wrapper = document.getElementById('canvasWrapper');
+            drawLayer.width = wrapper.clientWidth;
+            drawLayer.height = wrapper.clientHeight;
+        }
+
+        function loadProjectToUI() {
+            const p = projects[currentProjectName];
+            document.getElementById('dataInput').value = p.data;
+            document.getElementById('scriptInput').value = p.script || "";
+            document.getElementById('chartColor').value = p.chartColor || "#3b82f6";
+            document.getElementById('logToggle').innerText = p.isLog ? "LOG SCALE: ON" : "LOG SCALE: OFF";
+        }
+
+        function updateChart() {
+            const pData = projects[currentProjectName];
+            const lines = (pData.data || defaultData).trim().split('\n');
+            const labels = [], prices = [];
+            
+            lines.forEach(line => {
+                const parts = line.split(/[\t, ]+/).filter(p => p.trim() !== "");
+                if (parts.length >= 2) {
+                    labels.push(parts[0]);
+                    const price = parseFloat(parts[parts.length - 1].replace(/[^\d.-]/g, ''));
+                    if (!isNaN(price)) prices.push(price);
+                }
+            });
+
+            // Update Header Display
+            if(prices.length > 0) {
+                document.getElementById('lastPriceDisplay').innerText = `$${prices[prices.length-1].toLocaleString()}`;
+            }
+
+            const ctx = document.getElementById('mainChart').getContext('2d');
+            const mainColor = pData.chartColor || '#3b82f6';
+
+            // Create Gradient for Fill
+            const gradient = ctx.createLinearGradient(0, 0, 0, 400);
+            gradient.addColorStop(0, mainColor + '44');
+            gradient.addColorStop(1, 'transparent');
+
+            const datasets = [{
+                label: 'Price',
+                data: prices,
+                borderColor: mainColor,
+                borderWidth: 2,
+                fill: true,
+                backgroundColor: gradient,
+                tension: 0.3,
+                pointRadius: 0,
+                pointHoverRadius: 5,
+                pointHoverBackgroundColor: mainColor,
+                pointHoverBorderColor: '#fff'
+            }];
+
+            // MAs Logic
+            const activeMAs = pData.activeMAs || {};
+            Object.keys(activeMAs).forEach(p => {
+                datasets.push({
+                    label: `MA ${p}`,
+                    data: prices.map((_, i, a) => {
+                        if (i < p-1) return null;
+                        return a.slice(i-p+1, i+1).reduce((s,v)=>s+v,0)/p;
+                    }),
+                    borderColor: activeMAs[p],
+                    borderWidth: 1.5,
+                    pointRadius: 0,
+                    borderDash: [5, 5]
+                });
+            });
+
+            if (chart) chart.destroy();
+            chart = new Chart(ctx, {
+                type: 'line',
+                data: { labels, datasets },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    scales: {
+                        y: { 
+                            type: pData.isLog ? 'logarithmic' : 'linear',
+                            position: 'right', 
+                            grid: { color: '#1e293b' }, 
+                            ticks: { color: '#64748b', font: { size: 10 } } 
+                        },
+                        x: { 
+                            grid: { display: false }, 
+                            ticks: { color: '#64748b', font: { size: 10 }, maxRotation: 0 } 
+                        }
+                    },
+                    plugins: {
+                        legend: { display: false },
+                        zoom: {
+                            zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'x' },
+                            pan: { enabled: true, mode: 'x' }
+                        }
+                    }
+                }
+            });
+            setTimeout(redrawShapes, 50);
+        }
+
+        // -- Drawing System --
+        function setupDrawingEvents() {
+            drawLayer.onmousedown = (e) => {
+                isDrawing = true;
+                const rect = drawLayer.getBoundingClientRect();
+                startX = e.clientX - rect.left;
+                startY = e.clientY - rect.top;
+            };
+
+            drawLayer.onmousemove = (e) => {
+                if (!isDrawing) return;
+                const rect = drawLayer.getBoundingClientRect();
+                const curX = e.clientX - rect.left;
+                const curY = e.clientY - rect.top;
+                
+                dctx.clearRect(0, 0, drawLayer.width, drawLayer.height);
+                redrawShapes(); 
+                
+                dctx.strokeStyle = document.getElementById('drawColor').value;
+                dctx.lineWidth = 1;
+                dctx.setLineDash([5, 5]);
+                
+                if(currentTool === 'line') {
+                    dctx.beginPath(); dctx.moveTo(startX, startY); dctx.lineTo(curX, curY); dctx.stroke();
+                } else if(currentTool === 'rect') {
+                    dctx.fillStyle = dctx.strokeStyle + '22';
+                    dctx.fillRect(startX, startY, curX - startX, curY - startY);
+                    dctx.strokeRect(startX, startY, curX - startX, curY - startY);
+                } else if(currentTool === 'horiz') {
+                    dctx.beginPath(); dctx.moveTo(0, curY); dctx.lineTo(drawLayer.width, curY); dctx.stroke();
+                }
+            };
+
+            drawLayer.onmouseup = (e) => {
+                if (!isDrawing) return;
+                const rect = drawLayer.getBoundingClientRect();
+                const curX = e.clientX - rect.left;
+                const curY = e.clientY - rect.top;
+
+                projects[currentProjectName].drawings.push({
+                    tool: currentTool, x1: startX, y1: startY, x2: curX, y2: curY, 
+                    color: document.getElementById('drawColor').value 
+                });
+                
+                isDrawing = false;
+                autoSave();
+                redrawShapes();
+            };
+        }
+
+        function redrawShapes() {
+            dctx.clearRect(0, 0, drawLayer.width, drawLayer.height);
+            const drawings = projects[currentProjectName].drawings || [];
+            drawings.forEach(d => {
+                dctx.strokeStyle = d.color;
+                dctx.setLineDash([]);
+                dctx.lineWidth = 2;
+                dctx.beginPath();
+                if(d.tool === 'line') {
+                    dctx.moveTo(d.x1, d.y1); dctx.lineTo(d.x2, d.y2);
+                } else if(d.tool === 'rect') {
+                    dctx.fillStyle = d.color + '22';
+                    dctx.fillRect(d.x1, d.y1, d.x2 - d.x1, d.y2 - d.y1);
+                    dctx.strokeRect(d.x1, d.y1, d.x2 - d.x1, d.y2 - d.y1);
+                } else if(d.tool === 'horiz') {
+                    dctx.moveTo(0, d.y2); dctx.lineTo(drawLayer.width, d.y2);
+                }
+                dctx.stroke();
+            });
+        }
+
+        // -- Global Actions --
+        function setTool(t) {
+            currentTool = t;
+            document.querySelectorAll('.sidebar-tool').forEach(b => b.classList.remove('active'));
+            document.getElementById('btn-'+t).classList.add('active');
+        }
+
+        function toggleLogScale() {
+            projects[currentProjectName].isLog = !projects[currentProjectName].isLog;
+            autoSaveAndRefresh();
+            loadProjectToUI();
+        }
+
+        function toggleMA(period, color) {
+            if(!projects[currentProjectName].activeMAs) projects[currentProjectName].activeMAs = {};
+            const mas = projects[currentProjectName].activeMAs;
+            if (mas[period]) delete mas[period];
+            else mas[period] = color;
+            autoSaveAndRefresh();
+        }
+
+        function clearDrawings() {
+            if(confirm("Are you sure? This will delete all drawings.")) {
+                projects[currentProjectName].drawings = [];
+                autoSave();
+                redrawShapes();
+            }
+        }
+
+        function createNewProject() {
+            const name = prompt("Project Name:");
+            if (name && !projects[name]) {
+                projects[name] = { data: defaultData, drawings: [], activeMAs: {}, script: "", isLog: false, chartColor: "#3b82f6" };
+                currentProjectName = name;
+                autoSave();
+                location.reload();
+            }
+        }
+
+        function switchProject() {
+            currentProjectName = document.getElementById('projectSelect').value;
+            localStorage.setItem('cryptolab_curr', currentProjectName);
+            location.reload();
+        }
+
+        function renderProjectList() {
+            document.getElementById('projectSelect').innerHTML = Object.keys(projects)
+                .map(n => `<option value="${n}" ${n === currentProjectName ? 'selected' : ''}>${n}</option>`)
+                .join('');
+        }
+
+        function autoSave() {
+            projects[currentProjectName].data = document.getElementById('dataInput').value;
+            projects[currentProjectName].script = document.getElementById('scriptInput').value;
+            projects[currentProjectName].chartColor = document.getElementById('chartColor').value;
+            localStorage.setItem('cryptolab_v6', JSON.stringify(projects));
+            localStorage.setItem('cryptolab_curr', currentProjectName);
+        }
+
+        function autoSaveAndRefresh() { autoSave(); updateChart(); }
+        function resetZoom() { chart.resetZoom(); }
+
+        window.onload = init;
+        window.onresize = () => { syncCanvasSize(); updateChart(); };
+    </script>
+</body>
+</html>
